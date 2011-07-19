@@ -41,6 +41,7 @@ function activate() {
 	add_option('geolocation_map_width', '350');
 	add_option('geolocation_map_height', '150');
 	add_option('geolocation_default_zoom', '16');
+	add_option('geolocation_map_style', 'hover');
 	add_option('geolocation_map_position', 'after');
 	add_option('geolocation_wp_pin', '1');
 }
@@ -48,6 +49,7 @@ function activate() {
 function geolocation_add_custom_box() {
 		if(function_exists('add_meta_box')) {
 			add_meta_box('geolocation_sectionid', __( 'Geolocation', 'myplugin_textdomain' ), 'geolocation_inner_custom_box', 'post', 'advanced' );
+			add_meta_box('geolocation_sectionid', __( 'Geolocation', 'myplugin_textdomain' ), 'geolocation_inner_custom_box', 'story', 'advanced' );
 		} 
 		else {
 			add_action('dbx_post_advanced', 'geolocation_old_custom_box' );
@@ -328,9 +330,17 @@ function admin_head() {
 }
 
 function add_geo_div() {
-	$width = esc_attr(get_option('geolocation_map_width'));
-	$height = esc_attr(get_option('geolocation_map_height'));
-	echo '<div id="map" class="geolocation-map" style="width:'.$width.'px;height:'.$height.'px;"></div>';
+	if(get_option('geolocation_map_style') == 'hover') {
+		$width = esc_attr(get_option('geolocation_map_width'));
+		$height = esc_attr(get_option('geolocation_map_height'));
+		$style = esc_attr(get_option('geolocation_map_style'));
+		echo '<div id="map" class="geolocation-map" style="width:'.$width.'px;height:'.$height.'px;"';
+		if($style == 'hover')
+			echo ' visibility:hidden; position:absolute;';
+		else if($style == 'inline')
+			echo ' display:block; position: relative;';
+		echo '></div>';
+	}
 }
 
 function add_geo_support() {
@@ -361,6 +371,9 @@ function add_google_maps($posts) {
 	<script type="text/javascript">
 		var $j = jQuery.noConflict();
 		$j(function(){
+			';
+			if(get_option('geolocation_map_style') == 'hover') {
+				echo '
 			var center = new google.maps.LatLng(0.0, 0.0);
 			var myOptions = {
 		      zoom: '.$zoom.',
@@ -386,7 +399,8 @@ function add_google_maps($posts) {
 			
 			var allowDisappear = true;
 			var cancelDisappear = false;
-		    
+			$j("#map").css("position", "absolute");
+			$j("#map").css("visibility", "hidden");
 			$j(".geolocation-link").mouseover(function(){
 				$j("#map").stop(true, true);
 				var lat = $j(this).attr("name").split(",")[0];
@@ -405,8 +419,8 @@ function add_google_maps($posts) {
 				$j("#map").css("visibility", "visible");
 			});
 			
-			$j(".geolocation-link").mouseover(function(){
-			});
+			google.maps.event.addListener(map, "click", function() {
+				window.location = "http://maps.google.com/maps?q=" + map.center.lat() + ",+" + map.center.lng();
 			
 			$j(".geolocation-link").mouseout(function(){
 				allowDisappear = true;
@@ -422,7 +436,6 @@ function add_google_maps($posts) {
 					}
 			    },800);
 			});
-			
 			$j("#map").mouseover(function(){
 				allowDisappear = false;
 				cancelDisappear = true;
@@ -439,11 +452,34 @@ function add_google_maps($posts) {
 				map.setZoom('.$zoom.');
 				marker.setPosition(location);
 				map.setCenter(location);
+			}';
 			}
-			
-			google.maps.event.addListener(map, "click", function() {
-				window.location = "http://maps.google.com/maps?q=" + map.center.lat() + ",+" + map.center.lng();
-			});
+			else if(get_option('geolocation_map_style') == 'inline') {?>
+				    var image = '<?php esc_url(plugins_url('img/wp_pin.png', __FILE__ )); ?>';
+				    var shadow = new google.maps.MarkerImage('<?php echo plugins_url('img/wp_pin_shadow.png', __FILE__ )?>');
+				    <?php foreach($posts as $post): 				    	
+						$latitude = clean_coordinate(get_post_meta($post->ID, 'geo_latitude', true));
+						$longitude = clean_coordinate(get_post_meta($post->ID, 'geo_longitude', true));
+				    ?>
+					var location = new google.maps.LatLng('<?php echo $latitude; ?>', '<?php echo $longitude; ?>');
+					var myOptions = {
+				      zoom: <?php echo $zoom?>,
+				      center: location,
+				      mapTypeId: google.maps.MapTypeId.ROADMAP
+				    };
+		   			var map<?php echo $post->ID?> = new google.maps.Map(document.getElementById("map<?php echo $post->ID?>"), myOptions);
+				    var marker = new google.maps.Marker({
+							position: location, 
+							map: map<?php echo $post->ID?>, 
+							title:'Post Location'
+						<?php if(get_option('geolocation_wp_pin')) {
+							echo ',
+							icon: image,
+							shadow: shadow';
+						}?>});
+						<?php endforeach;
+			}
+			echo '
 		});
 	</script>';
 }
@@ -468,6 +504,8 @@ function display_location($content)  {
 	$longitude = clean_coordinate(get_post_meta($post->ID, 'geo_longitude', true));
 	$address = get_post_meta($post->ID, 'geo_address', true);
 	$public = (bool)get_post_meta($post->ID, 'geo_public', true);
+	$width = get_option('geolocation_map_width');
+	$height = get_option('geolocation_map_height');
 	
 	$on = true;
 	if(get_post_meta($post->ID, 'geo_enabled', true) != '')
@@ -477,7 +515,14 @@ function display_location($content)  {
 		$address = reverse_geocode($latitude, $longitude);
 	
 	if((!empty($latitude)) && (!empty($longitude) && ($public == true) && ($on == true))) {
-		$html = '<a class="geolocation-link" href="#" id="geolocation'.$post->ID.'" name="'.$latitude.','.$longitude.'" onclick="return false;">Posted from '.esc_html($address).'.</a>';
+		
+		if(get_option('geolocation_map_style') == 'inline') {
+			$html = '<div id="map'.$post->ID.'" class="map" style="width:'.$width.'px;height:'.$height.'px;"></div>';
+		}
+		else if(get_option('geolocation_map_style') == 'hover') {
+			$html = '<a class="geolocation-link" href="#" id="geolocation'.$post->ID.'" name="'.$latitude.','.$longitude.'" onclick="return false;">Posted from '.esc_html($address).'.</a>';
+		}
+		
 		switch(esc_attr(get_option('geolocation_map_position')))
 		{
 			case 'before':
@@ -550,6 +595,7 @@ function register_settings() {
   register_setting( 'geolocation-settings-group', 'geolocation_map_width', 'intval' );
   register_setting( 'geolocation-settings-group', 'geolocation_map_height', 'intval' );
   register_setting( 'geolocation-settings-group', 'geolocation_default_zoom', 'intval' );
+  register_setting( 'geolocation-settings-group', 'geolocation_map_style' );
   register_setting( 'geolocation-settings-group', 'geolocation_map_position' );
   register_setting( 'geolocation-settings-group', 'geolocation_wp_pin');
 }
@@ -573,6 +619,9 @@ function default_settings() {
 		
 	if(get_option('geolocation_default_zoom') == '0')
 		update_option('geolocation_default_zoom', '16');
+		
+	if(get_option('geolocation_map_style') == '0')
+		update_option('geolocation_map_style', 'hover');
 		
 	if(get_option('geolocation_map_position') == '0')
 		update_option('geolocation_map_position', 'after');
@@ -622,6 +671,14 @@ function geolocation_settings_page() {
 	        <td class="dimensions">
 	        	<strong>Width:</strong><input type="text" name="geolocation_map_width" value="<?php echo esc_attr(get_option('geolocation_map_width')); ?>" />px<br/>
 	        	<strong>Height:</strong><input type="text" name="geolocation_map_height" value="<?php echo esc_attr(get_option('geolocation_map_height')); ?>" />px
+	        </td>
+        </tr>
+        <tr valign="top">
+        	<th scope="row">Style</th>
+        	<td class="position">        	
+				<input type="radio" id="geolocation_map_style_hover" name="geolocation_map_style" value="hover"<?php is_value('geolocation_map_style', 'hover'); ?>><label for="geolocation_map_style_hover">Hover</label><br/>
+				<input type="radio" id="geolocation_map_style_inline" name="geolocation_map_style" value="inline"<?php is_value('geolocation_map_style', 'inline'); ?>><label for="geolocation_map_style_inline">Inline</label><br/>
+				<input type="radio" id="geolocation_map_style_summary" name="geolocation_map_style" value="summary"<?php is_value('geolocation_map_style', 'summary'); ?>><label for="geolocation_map_style_summary">Summary</label>
 	        </td>
         </tr>
         <tr valign="top">

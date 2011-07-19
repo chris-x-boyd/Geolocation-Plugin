@@ -4,5 +4,5 @@
 */
 .geolocation-icon { border: none; margin: 0 5px 0 0; }
 .geolocation-map { border: solid 1px #999; }
-#map { background: #fff; border: solid 1px #999; position: absolute; top:0px; left:0px; padding: 20px; visibility: hidden; }
+.map { background: #fff; border: solid 1px #999; top:0px; left:0px; padding: 20px; }
 #mapwrap { padding: 20px; }
