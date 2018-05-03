@@ -330,7 +330,7 @@ function admin_head() {
 function add_geo_div() {
 	$width = esc_attr(get_option('geolocation_map_width'));
 	$height = esc_attr(get_option('geolocation_map_height'));
-    echo '<div id="mymap" class="geolocation-map" style="width:'.$width.'px;height:'.$height.'px;"></div>';
+    echo '<div id="map" class="geolocation-map" style="width:'.$width.'px;height:'.$height.'px;"></div>';
 }
 
 function add_geo_support() {
@@ -361,7 +361,7 @@ function add_google_maps($posts) {
 <script type=\"text/javascript\">
     function initialize() {
       var map = new google.maps.Map(
-        document.getElementById('mymap'), {
+        document.getElementById('map'), {
           mapTypeId: google.maps.MapTypeId.ROADMAP
         }
       );
